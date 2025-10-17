@@ -5,7 +5,10 @@
 
 cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
 project (ROCKSDB_IVF)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Debug)
+find_package(OpenMP REQUIRED)
 find_package(faiss REQUIRED)
 find_package(RocksDB REQUIRED)
 
