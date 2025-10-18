@@ -1,3 +1,5 @@
 build
 test_db
 test_db*
+# index without the inverted lists part
+index.faiss
