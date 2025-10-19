@@ -1,5 +1,7 @@
 #include "S3InvertedLists.h"
 
+#include <cassert>
+
 namespace faiss_s3 {
 
 // Type alias for Faiss index type to avoid polluting namespace
@@ -59,7 +61,7 @@ const idx_t* S3BuildOnlyInvertedLists::get_ids(size_t list_no) const {
 size_t S3BuildOnlyInvertedLists::add_entries(
     size_t list_no,
     size_t n_entry,
-    const idx_t* ids,
+    const idx_t* ids_in,
     const uint8_t* code) {
     if (n_entry == 0) {
         // NOTE: return 0 instead of ids[list_no].size() because the return value is
@@ -74,9 +76,9 @@ size_t S3BuildOnlyInvertedLists::add_entries(
     size_t o = ids[list_no].size();
     // Resize and copy ids
     ids[list_no].resize(o + n_entry);
-    memcpy(&ids[list_no][o], ids, n_entry * sizeof(idx_t));
+    memcpy(&ids[list_no][o], ids_in, n_entry * sizeof(idx_t));
     // Resize and copy vectors
-    codes[list_no].resize(o + n_entry * code_size);
+    codes[list_no].resize((o + n_entry) * code_size);
     memcpy(&codes[list_no][o * code_size], code, n_entry * code_size);
     return o;
 }
@@ -85,14 +87,14 @@ void S3BuildOnlyInvertedLists::update_entries(
     size_t list_no,
     size_t offset,
     size_t n_entry,
-    const idx_t* ids,
+    const idx_t* ids_in,
     const uint8_t* code) {
     // Cluster exists
     assert(list_no < nlist);
     // Valid offset and n_entry
     assert(n_entry + offset <= ids[list_no].size());
     // Copy ids
-    memcpy(&ids[list_no][offset], ids, n_entry * sizeof(idx_t));
+    memcpy(&ids[list_no][offset], ids_in, n_entry * sizeof(idx_t));
     // Copy vectors
     memcpy(&codes[list_no][offset * code_size], code, n_entry * code_size);
 }

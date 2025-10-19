@@ -52,13 +52,13 @@ struct S3BuildOnlyInvertedLists : faiss::InvertedLists {
     // Add vectors to a cluster
     // - list_no is the cluster index
     // - n_entry is the number of vectors to add
-    // - ids is the raw pointer and visit base on n_entry and sizeof(idx_t)
+    // - ids_in is the raw pointer and visit base on n_entry and sizeof(idx_t)
     // - code is the raw pointer and visit base on n_entry and code_size
     // Returns the offset of the first new vector in the cluster
     size_t add_entries(
         size_t list_no,
         size_t n_entry,
-        const idx_t* ids,
+        const idx_t* ids_in,
         const uint8_t* code) override;
 
     // Update vectors in a cluster in place.
@@ -67,7 +67,7 @@ struct S3BuildOnlyInvertedLists : faiss::InvertedLists {
         size_t list_no,
         size_t offset,
         size_t n_entry,
-        const idx_t* ids,
+        const idx_t* ids_in,
         const uint8_t* code) override;
 
 

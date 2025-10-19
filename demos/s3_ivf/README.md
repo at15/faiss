@@ -5,7 +5,8 @@ When using the index, centroids are loaded into memory and the inverted lists ar
 
 ## TODO
 
-- [ ] CMake to make sure things are working
+- [x] CMake to make sure things are working
+- [ ] Figure out the format we want to use, ideally use same format as array inverted lists so user can read it directly when fully downloaded
 
 ## Build
 
