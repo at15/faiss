@@ -43,3 +43,5 @@ InvertedLists* read_InvertedLists(IOReader* f, int io_flags) {
     }
 }
 ```
+
+Seems we can do it base on [index-read-hook-mmap.claude.md](index-read-hook-mmap.claude.md)

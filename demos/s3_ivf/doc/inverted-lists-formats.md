@@ -3,6 +3,7 @@
 A short version base on [inverted-lists-formats.claude.md](inverted-lists-formats.claude.md) and [io-macros.calude.md](io-macros.calude.md)
 
 - If you write a custom format, need to register for `write_index` to work.
+- No endiannes logic, assume 64 bit and write bytes directly.
 - Use macros to read/write data to get execption with line number
 
 ## ArrayInvertedLists
