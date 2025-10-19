@@ -11,5 +11,5 @@ find_package(faiss REQUIRED)
 # find_package(RocksDB REQUIRED)
 # TODO: Add AWS C++ SDK
 
-add_executable(demo_s3_ivf demo_s3_ivf.cpp)
+add_executable(demo_s3_ivf demo_s3_ivf.cpp S3InvertedLists.cpp)
 target_link_libraries(demo_s3_ivf faiss)

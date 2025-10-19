@@ -22,5 +22,15 @@
         "line": 5
       }
     ]
+  },
+  {
+    "label": "invlist",
+    "children": [
+      {
+        "label": "ArrayInvertedLists.h",
+        "relativePath": "faiss/invlists/InvertedLists.h",
+        "line": 243
+      }
+    ]
   }
 ]
