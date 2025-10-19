@@ -1,0 +1,26 @@
+[
+  {
+    "label": "Default",
+    "children": []
+  },
+  {
+    "label": "s3",
+    "children": [
+      {
+        "label": "README.md:6 - ## TODO",
+        "relativePath": "demos/s3_ivf/README.md",
+        "line": 5
+      }
+    ]
+  },
+  {
+    "label": "rocksdb",
+    "children": [
+      {
+        "label": "CMakeLists.txt:6 - cmake_minimum_required(VERSION 3.17 FATAL_ERROR)",
+        "relativePath": "demos/rocksdb_ivf/CMakeLists.txt",
+        "line": 5
+      }
+    ]
+  }
+]
