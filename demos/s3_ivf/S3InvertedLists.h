@@ -1,5 +1,11 @@
 #pragma once
 
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include <faiss/index_io.h>
 #include <faiss/invlists/InvertedLists.h>
 
 namespace faiss_s3 {
@@ -77,11 +83,103 @@ struct S3BuildOnlyInvertedLists : faiss::InvertedLists {
     // There is a default CodeArrayIterator implementation in InvertedLists.cpp
 };
 
-// Lazy load data from S3 on demand
-// struct S3ReadOnlyInvertedLists : faiss::InvertedLists {
-// };
+// Placeholder created during read_index() with IO_FLAG_S3
+// All methods throw errors until replaced with S3ReadOnlyInvertedLists
+struct S3ReadNothingInvertedLists : faiss::InvertedLists {
+    std::vector<size_t> cluster_sizes;  // Store sizes from hook
+
+    S3ReadNothingInvertedLists(size_t nlist, size_t code_size, const std::vector<size_t>& sizes);
+
+    size_t list_size(size_t list_no) const override;
+    const uint8_t* get_codes(size_t list_no) const override;
+    const idx_t* get_ids(size_t list_no) const override;
+
+    size_t add_entries(
+        size_t list_no,
+        size_t n_entry,
+        const idx_t* ids_in,
+        const uint8_t* code) override;
+
+    void update_entries(
+        size_t list_no,
+        size_t offset,
+        size_t n_entry,
+        const idx_t* ids_in,
+        const uint8_t* code) override;
+
+    void resize(size_t list_no, size_t new_size) override;
+};
+
+// Lazy load cluster data from S3 on demand
+struct S3ReadOnlyInvertedLists : faiss::InvertedLists {
+    // S3 configuration
+    std::string s3_bucket;
+    std::string s3_key;  // Path to index file in S3
+    std::shared_ptr<void> s3_client_;  // Opaque pointer to S3 client (reused for all requests)
+
+    // Metadata
+    size_t cluster_data_offset;
+    size_t sizes_array_offset;
+    size_t sizes_array_count;
+    std::string sizes_array_format;  // "full" or "sparse"
+
+    // Cluster information
+    std::vector<size_t> cluster_sizes;  // Number of vectors per cluster
+    std::vector<size_t> cluster_offsets; // Byte offset in file
+
+    // Cache (no LRU for now, cache forever)
+    mutable std::unordered_map<size_t, std::vector<uint8_t>> codes_cache;
+    mutable std::unordered_map<size_t, std::vector<idx_t>> ids_cache;
+    mutable std::mutex cache_mutex;
+
+    // Constructor: loads metadata from JSON string and uses provided sizes
+    // s3_client should be created by caller and passed in (shared across all instances)
+    S3ReadOnlyInvertedLists(
+        std::shared_ptr<void> s3_client,
+        const std::string& bucket,
+        const std::string& key,
+        const std::string& metadata_json,
+        const std::vector<size_t>& sizes);
+
+    // Read methods (lazy loading)
+    size_t list_size(size_t list_no) const override;
+    const uint8_t* get_codes(size_t list_no) const override;
+    const idx_t* get_ids(size_t list_no) const override;
+
+    // Write methods (throw errors)
+    size_t add_entries(
+        size_t list_no,
+        size_t n_entry,
+        const idx_t* ids_in,
+        const uint8_t* code) override;
+
+    void update_entries(
+        size_t list_no,
+        size_t offset,
+        size_t n_entry,
+        const idx_t* ids_in,
+        const uint8_t* code) override;
+
+    void resize(size_t list_no, size_t new_size) override;
+
+private:
+    void load_metadata(const std::string& metadata_json);
+    void load_sizes_from_s3();
+    void calculate_cluster_offsets();
+    void fetch_cluster(size_t list_no) const;
+};
+
+// IO flag for S3 lazy loading
+// 0x7333 = "s3" in hex (big-endian for fourcc)
+// Combined with IO_FLAG_SKIP_IVF_DATA and "il" prefix → "ils3"
+// IO flag for S3 on-demand loading
+// fourcc("ils3") = 0x33736c69, so upper 16 bits = 0x3373
+const int IO_FLAG_S3 = faiss::IO_FLAG_SKIP_IVF_DATA | 0x33730000;
 
 // TODO: Check IndexIVFlatPanorama https://github.com/facebookresearch/faiss/pull/4606
 // TODO: I remember claude code mentioned there is prefetch .... might need to check the rocksdb implementation
+
+// Manually register S3 hook (call this before using IO_FLAG_S3)
+void register_s3_io_hook();
 
 } // namespace faiss_s3

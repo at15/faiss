@@ -137,3 +137,8 @@ You can look at existing cpp files for reference
 
 - [rocksdb_ivf](../../rocksdb_ivf/demo_rocksdb_ivf.cpp)
 - [test_s3](../test_s3.cpp)
+
+Issues found:
+
+- Not handling the full and sparse size array format
+- The S3 Client should be passed in for the `S3ReadOnlyInvertedLists` constructor, NOT having in in the demo script ... 
