@@ -93,3 +93,47 @@ The metadata looks like this:
   - "sparse": sizes array contains pairs of (cluster_id, size) for non-empty clusters only
 - To calculate individual cluster offsets, read the sizes array from the file and calculate sequentially
 - The `cluster_data_offset` is where the actual cluster data (codes + ids) starts
+
+### Reader
+
+Use the IO hook similar to `OnDiskInvertedLists`, as described in [index-read-hook-mmap.claude.md](index-read-hook-mmap.claude.md).
+
+We create two new readonly InvertedLists implementations:
+
+- `S3ReadNothingInvertedLists` is the one registered for the IO hook because we don't read anything during `read_index`, we just register it avoid triggering full read using the default `ArrayInvertedLists` logic.
+  - We have this placeholder because registering IOHook is global, and we need different metadata for different index files.
+- `S3ReadOnlyInvertedLists` is the actual on demand loader. We use `index.replace_invlists` to replace our placeholder `S3ReadNothingInvertedLists` with the actual `S3ReadOnlyInvertedLists` after `read_index` is done.
+- NOTE: `S3BuildOnlyInvertedLists` is not needed anymore because we use `ArrayInvertedLists` when building index, we keep it there because it has good comment on what each method is doing.
+
+For `S3ReadOnlyInvertedLists`:
+
+- The cluster data from the IVF index file has number of vectors in each cluster, but does not have the offset of cluster in file.
+  - We solve it by saving the first cluster's offset in `a.ivf.meta.json`, which we keep track when writing the index file `a.ivf` and saved as json.
+    - We can cacluate the offset by adding previous cluster's size to the first cluster's offset.
+  - We read `a.ivf.meta.json` from local disk right now for simplicity, later we should upload this file to S3 and read the metadata from S3.
+- Throw errors on `resize`, `update_entries`, `add_entries` etc. because we don't support any write operations.
+- When cluster data is needed, e.g. `get_codes` or `get_ids`, we download the cluster data from S3 on demand using range request and cache it in memory.
+  - No need to LRU for now, simply cache for ever until object destruction
+  - Try zero copy if possible, the format in file should be able to directly map to memory, which is why `OnDiskInvertedLists` can do mmap on `ArrayInvertedLists`
+
+The read process is roughly in following pseduo code:
+
+```text
+# register the hook
+register_io_hook("S3ReadNothingInvertedLists")
+
+metadata = read_metadata_from_local_json()
+# be aware http range request is inclusive on BOTH sides
+index_without_inverted_lists = s3.get("a.ivf", range(0, size_before_inverted_lists_data_start))
+index = read_index(index_without_inverted_lists)
+
+s3_readonly_inverted_lists = S3ReadOnlyInvertedLists(s3, metadata)
+index.replace_invlists(s3_readonly_inverted_lists)
+
+index.search(query_vectors, k)
+```
+
+You can look at existing cpp files for reference
+
+- [rocksdb_ivf](../../rocksdb_ivf/demo_rocksdb_ivf.cpp)
+- [test_s3](../test_s3.cpp)
