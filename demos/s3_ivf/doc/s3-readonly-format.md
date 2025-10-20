@@ -71,10 +71,25 @@ The metadata looks like this:
 
 ```json
 {
-    "total_size": 1000000, // total file size in bytes
-    "inverted_list_offset": 100000, // offset where the inverted list data starts
-    "n_clusters": 100, // number of clusters
-    "code_size": 512, // size of single encoded vector e.g. 128*sizeof(float)
-    "cluster_sizes": [1000, 2000, 3000, ...] // size of each cluster in bytes
+    "total_size": 52052139,
+    "inverted_lists_offset": 51307,
+    "n_clusters": 100,
+    "code_size": 512,
+    "sizes_array_offset": 51331,
+    "sizes_array_count": 100,
+    "sizes_array_format": "full",
+    "cluster_data_offset": 52139
 }
 ```
+
+## Implementation
+
+### IOWriter
+
+- We don't store `cluster_sizes` array in metadata since it's already in the index file
+- The `sizes_array_offset` points to where the sizes array starts in the file
+- The `sizes_array_format` can be "full" or "sparse" (see `write_InvertedLists` in `index_write.cpp`)
+  - "full": sizes array contains one entry per cluster (nlist entries)
+  - "sparse": sizes array contains pairs of (cluster_id, size) for non-empty clusters only
+- To calculate individual cluster offsets, read the sizes array from the file and calculate sequentially
+- The `cluster_data_offset` is where the actual cluster data (codes + ids) starts
