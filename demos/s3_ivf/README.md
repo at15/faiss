@@ -11,15 +11,22 @@ When using the index, centroids are loaded into memory and the inverted lists ar
 ## Build
 
 ```bash
-cmake -B build \
-  -DOpenMP_C_FLAGS="-Xclang -fopenmp -I/opt/homebrew/opt/libomp/include" \
-  -DOpenMP_C_LIB_NAMES="omp" \
-  -DOpenMP_omp_LIBRARY=/opt/homebrew/opt/libomp/lib/libomp.dylib \
-  -DOpenMP_CXX_FLAGS="-Xclang -fopenmp -I/opt/homebrew/opt/libomp/include" \
-  -DOpenMP_CXX_LIB_NAMES="omp" \
-  .
+./build-s3-sdk.sh
+./config.sh
+make build
+```
 
-cd build
-make -j$(nproc)
-./demo_s3_ivf
+For S3
+
+```bash
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_REGION=us-east-1
+export AWS_EC2_METADATA_DISABLED=true
+export S3_ENDPOINT_URL=http://localhost:9000
+
+# Write to local s3mock
+./build/test_s3 test-bucket test.txt put "Hello, S3 test"
+# Read from local s3mock
+./build/test_s3 test-bucket test.txt get
 ```

@@ -5,3 +5,7 @@ json.hpp
 
 *.ivf
 *.ivf.meta.json
+
+# aws sdk
+aws-sdk-cpp
+aws-sdk-cpp-home

@@ -5,11 +5,15 @@ project (S3_IVF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Debug)
+
+# Deps
 find_package(OpenMP REQUIRED)
 find_package(faiss REQUIRED)
 # We don't need rocksdb
 # find_package(RocksDB REQUIRED)
-# TODO: Add AWS C++ SDK
+find_package(AWSSDK REQUIRED COMPONENTS s3-crt)
 
 add_executable(demo_s3_ivf demo_s3_ivf.cpp S3InvertedLists.cpp)
-target_link_libraries(demo_s3_ivf faiss)
+add_executable(test_s3 test_s3.cpp)
+target_link_libraries(test_s3 ${AWSSDK_LINK_LIBRARIES})
+target_link_libraries(demo_s3_ivf faiss ${AWSSDK_LINK_LIBRARIES})

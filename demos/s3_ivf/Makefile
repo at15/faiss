@@ -1,5 +1,8 @@
 .PHONY: build test format
 
+config:
+	./config.sh
+
 build:
 	cmake --build build
 
