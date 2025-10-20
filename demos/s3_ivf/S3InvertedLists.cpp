@@ -1,6 +1,7 @@
 #include "S3InvertedLists.h"
 
 #include <aws/core/Aws.h>
+#include <aws/core/utils/StringUtils.h>
 #include <aws/s3-crt/S3CrtClient.h>
 #include <aws/s3-crt/S3CrtClientConfiguration.h>
 #include <aws/s3-crt/model/GetObjectRequest.h>
@@ -57,8 +58,10 @@ static std::vector<uint8_t> DownloadRangeFromS3(
     request.SetKey(key);
 
     // S3 range format: "bytes=start-end" (inclusive on both ends)
-    std::string range = "bytes=" + std::to_string(offset) + "-" +
-                        std::to_string(offset + size - 1);
+    // Use Aws::String and Aws::Utils::StringUtils::to_string like test_s3.cpp does
+    Aws::String range = "bytes=" +
+                        Aws::Utils::StringUtils::to_string(offset) + "-" +
+                        Aws::Utils::StringUtils::to_string(offset + size - 1);
     request.SetRange(range);
 
     auto outcome = client->GetObject(request);

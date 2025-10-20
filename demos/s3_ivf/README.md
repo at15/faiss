@@ -6,7 +6,11 @@ When using the index, centroids are loaded into memory and the inverted lists ar
 ## TODO
 
 - [x] CMake to make sure things are working
-- [ ] Figure out the format we want to use, ideally use same format as array inverted lists so user can read it directly when fully downloaded
+- [x] Figure out the format we want to use, ideally use same format as array inverted lists so user can read it directly when fully downloaded
+- [ ] Clean up the code, verify it works manually and using actual data, that's what the `svf.h` is fow. There is likly thread, lock granularity, memory management issues as well.
+  - [ ] the claude generated code is having a big lock on cache right now, which makes both read and write slow and serial ..., GPT and claude suggest using `shared_future`. TIL: C++ has future... (well that's a pun)
+- [ ] Update the python binding
+- [ ] Figure out how to build the C++ library and python wheel (in container, so we I can run becnhmark in other places)
 
 ## Build
 

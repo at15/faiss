@@ -76,11 +76,11 @@ struct S3BuildOnlyInvertedLists : faiss::InvertedLists {
         const idx_t* ids_in,
         const uint8_t* code) override;
 
-
-    // TODO: What does the get_iterator do?
-    // Seems it is used for getting vectors one by one
+    // NOTE: get_iterator is for e.g. rocksdb where the entire vectors are
+    // NOT loaded in memory and need to get vectors one by one. The default
+    // implementation `CodeArrayIterator` wraps the raw memory addresses and
+    // returns (id, vector) one by one.
     // TODO: Is this efficient? Why not get vectors in batches to compute distance again the query vector?
-    // There is a default CodeArrayIterator implementation in InvertedLists.cpp
 };
 
 // Placeholder created during read_index() with IO_FLAG_S3

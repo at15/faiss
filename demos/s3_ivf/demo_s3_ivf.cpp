@@ -45,6 +45,8 @@ std::shared_ptr<Aws::S3Crt::S3CrtClient> CreateS3Client() {
     if (region != nullptr) {
         config.region = region;
     }
+    // TODO: Config part size and throughput target
+    // Seems AWS C++ SDK do parallel range requests automatically
 
     return Aws::MakeShared<Aws::S3Crt::S3CrtClient>("S3CrtClient", config);
 }
