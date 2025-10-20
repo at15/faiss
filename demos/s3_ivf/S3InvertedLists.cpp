@@ -7,8 +7,10 @@ namespace faiss_s3 {
 // Type alias for Faiss index type to avoid polluting namespace
 using idx_t = faiss::idx_t;
 
-S3BuildOnlyInvertedLists::S3BuildOnlyInvertedLists(size_t nlist, size_t code_size)
-    : faiss::InvertedLists(nlist, code_size) {
+S3BuildOnlyInvertedLists::S3BuildOnlyInvertedLists(
+        size_t nlist,
+        size_t code_size)
+        : faiss::InvertedLists(nlist, code_size) {
     codes.resize(nlist);
     ids.resize(nlist);
 }
@@ -23,7 +25,9 @@ size_t S3BuildOnlyInvertedLists::list_size(size_t list_no) const {
     return ids[list_no].size();
 }
 
-bool S3BuildOnlyInvertedLists::is_empty(size_t list_no, void* inverted_list_context) const {
+bool S3BuildOnlyInvertedLists::is_empty(
+        size_t list_no,
+        void* inverted_list_context) const {
     FAISS_THROW_IF_NOT(inverted_list_context == nullptr);
     return ids[list_no].size() == 0;
 }
@@ -59,16 +63,16 @@ const idx_t* S3BuildOnlyInvertedLists::get_ids(size_t list_no) const {
 }
 
 size_t S3BuildOnlyInvertedLists::add_entries(
-    size_t list_no,
-    size_t n_entry,
-    const idx_t* ids_in,
-    const uint8_t* code) {
+        size_t list_no,
+        size_t n_entry,
+        const idx_t* ids_in,
+        const uint8_t* code) {
     if (n_entry == 0) {
-        // NOTE: return 0 instead of ids[list_no].size() because the return value is
-        // not used when n_entry is 0 ...
-        // Exit early, though for in memory implementation, it is not providing
-        // much performance benefits, would be useful for disk/remote implementation
-        // to skip visting a cluster.
+        // NOTE: return 0 instead of ids[list_no].size() because the return
+        // value is not used when n_entry is 0 ... Exit early, though for in
+        // memory implementation, it is not providing much performance benefits,
+        // would be useful for disk/remote implementation to skip visting a
+        // cluster.
         return 0;
     }
     assert(list_no < nlist);
@@ -84,11 +88,11 @@ size_t S3BuildOnlyInvertedLists::add_entries(
 }
 
 void S3BuildOnlyInvertedLists::update_entries(
-    size_t list_no,
-    size_t offset,
-    size_t n_entry,
-    const idx_t* ids_in,
-    const uint8_t* code) {
+        size_t list_no,
+        size_t offset,
+        size_t n_entry,
+        const idx_t* ids_in,
+        const uint8_t* code) {
     // Cluster exists
     assert(list_no < nlist);
     // Valid offset and n_entry

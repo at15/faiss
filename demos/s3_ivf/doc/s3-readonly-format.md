@@ -1,5 +1,7 @@
 # S3 Read Only Format
 
+## Background
+
 For the serialization format, since it is read only and loads from S3 to memory.
 We can combine `ArrayInvertedLists` and `OnDiskInvertedLists`.
 
@@ -45,3 +47,34 @@ InvertedLists* read_InvertedLists(IOReader* f, int io_flags) {
 ```
 
 Seems we can do it base on [index-read-hook-mmap.claude.md](index-read-hook-mmap.claude.md)
+We can also use a dummy implementation and then do `replace_invlists`.
+We can also append other data such as original text, full text etc. to end of the end file and they won't be loaded by faiss ...
+
+## Design
+
+When we write the index, we keep track of the the folling information:
+
+- total file size
+- offset where the inverted list data starts
+- offset of each cluster
+
+Without modifying existing `write_index` implementation what we can do is:
+
+- Replace the default `ArrayInvertedLists` with another `ArrayInvertedLists` because I don't know if we can get the inverted lists directly using some methods on index. We need a reference to it to get size of each cluster (withotu reading the file ...)
+- Calculate the offset of inverted list by using `total file size - total inverted list size`, which is similar to `write_InvertedLists` implementation, except we only add up the size without writing anything
+- We can provide a custom `IOWriter` implementation because we will likely switch to writing to S3 directly instead of having a intermediate local file.
+  - We can start with local file for now since we didn't even import the S3 SDK yet.
+
+Then we save the offset information to another file (for now).
+For simplicity, we can use JSON via `nlohmann::json`.
+The metadata looks like this:
+
+```json
+{
+    "total_size": 1000000, // total file size in bytes
+    "inverted_list_offset": 100000, // offset where the inverted list data starts
+    "n_clusters": 100, // number of clusters
+    "code_size": 512, // size of single encoded vector e.g. 128*sizeof(float)
+    "cluster_sizes": [1000, 2000, 3000, ...] // size of each cluster in bytes
+}
+```

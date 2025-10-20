@@ -10,54 +10,38 @@
 #include <faiss/index_io.h>
 #include <faiss/utils/random.h>
 
+#include "svf.h" // Read from simple vector format to use generated embeddings and text
 #include "S3InvertedLists.h"
 
-// ============================================================================
-// Constants
-// ============================================================================
-// TODO: Use more meaningful constant names such as VEC_DIM, N_CLUSTERS, N_VECTORS
-const size_t D = 128;        // Vector dimension
-const size_t NLIST = 100;    // Number of IVF clusters
-const size_t NB = 10000;      // Number of vectors to index
-
-const size_t NQ = 20;         // Number of query vectors
-const size_t K = 5;           // Top-K for k-NN search
-const size_t NPROBE = 2;        // Number of clusters to probe during search
-
-// Build the index in memory and flush it to s3.
 void build_index(const char* index_file_name) {
     std::cout << "Building index in memory and flushing to s3..." << std::endl;
 
-    // Create index, default invert list implementation is memory
-    faiss::IndexFlatL2 quantizer(D);
-    faiss::IndexIVFFlat index(&quantizer, D, NLIST);
+    const size_t VEC_DIM = 128;     // Vector dimension
+    const size_t N_CLUSTERS = 100; // Number of IVF clusters
+    const size_t N_VECTORS = 100'000;  // Number of vectors to index
 
-    // Create S3 inverted lists TODO: not really s3 right now ...
-    // TODO: We can also replace it with ArrayInvertedLists
-    // We just need to get size of each cluster and we can load the vectors properly
-    faiss_s3::S3BuildOnlyInvertedLists s3_inverted_lists(NLIST, index.code_size);
+    // Create index, default invert list implementation is memory
+    faiss::IndexFlatL2 quantizer(VEC_DIM);
+    faiss::IndexIVFFlat index(&quantizer, VEC_DIM, N_CLUSTERS);
+    index.verbose = true;
+
+    // Createa a new ArrayInvertedLists so that we can get number of vectors in each cluster
+    // and calculate the offset for each cluster.
+    faiss::ArrayInvertedLists array_inverted_lists(N_CLUSTERS, index.code_size);
     // TODO: What does the false here mean?
-    index.replace_invlists(&s3_inverted_lists, false);
+    index.replace_invlists(&array_inverted_lists, false);
 
     // Generate random vectors
-    std::vector<float> xb(D * NB);
-    faiss::float_rand(xb.data(), D * NB, 12345);
+    std::vector<float> xb(VEC_DIM * N_VECTORS);
+    faiss::float_rand(xb.data(), VEC_DIM * N_VECTORS, 12345);
 
     // Train
     // TODO: We can use less vectors for training
-    index.verbose = true;
-    index.train(NB, xb.data());
+    index.train(N_VECTORS, xb.data());
 
     // Add vectors
-    index.add(NB, xb.data());
+    index.add(N_VECTORS, xb.data());
 
-    // TODO: Do we want the local file format to be same as the default ivf file format?
-    // all we need for reading from S3 on demand is the offset for each cluster.
-
-    // TODO: We need to replace the list with empty ArrayInvertedLists
-    // otherwise write_index try to lookup our classname and fail
-    // NOTE: We cannot use write_index because we didn't register it
-    // libc++abi: terminating due to uncaught exception of type faiss::FaissException: Error in static InvertedListsIOHook *faiss::InvertedListsIOHook::lookup_classname(const std::string &) at /Volumes/w/src/github.com/facebookresearch/faiss/faiss/invlists/InvertedListsIOHook.cpp:75: read_InvertedLists: could not find classname N8faiss_s324S3BuildOnlyInvertedListsE
     faiss::write_index(&index, index_file_name);
 }
 
