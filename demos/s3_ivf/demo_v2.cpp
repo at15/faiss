@@ -129,7 +129,59 @@ void read_s3_file() {
                   << ", ntotal=" << index->ntotal << ", nlist=" << index->nlist
                   << ")" << std::endl;
 
-        // Next is replace it with the ondemand reader
+        // Replace placeholder with S3OnDemandInvertedLists
+        auto* placeholder = dynamic_cast<faiss_s3::S3ReadNothingInvertedLists*>(
+                index->invlists);
+        if (!placeholder) {
+            throw std::runtime_error(
+                    "Inverted lists is not S3ReadNothingInvertedLists");
+        }
+
+        // Create cache configuration (cluster_data_offset = size = 3154059)
+        faiss_s3::S3ClusterCache::Config cache_config;
+        cache_config.bucket = "test-bucket";
+        cache_config.key = "quora/index.idx";
+        cache_config.cluster_data_offset = size; // Same as downloaded header size
+        cache_config.cluster_sizes = placeholder->cluster_sizes;
+        cache_config.code_size = index->code_size;
+
+        // Create cache and fetch function
+        auto cache = std::make_shared<faiss_s3::S3ClusterCache>(
+                s3_client, cache_config);
+        auto fetch_fn = faiss_s3::make_fetch_fn(cache);
+
+        // Create on-demand inverted lists
+        auto s3_invlists = new faiss_s3::S3OnDemandInvertedLists(
+                index->nlist, index->code_size, placeholder->cluster_sizes, fetch_fn);
+
+        index->replace_invlists(s3_invlists, true);
+
+        std::cout << "✓ Replaced with S3OnDemandInvertedLists" << std::endl;
+
+        // Perform search
+        index->nprobe = 2;
+        const size_t NQ = 10;
+        const size_t K = 5;
+
+        std::vector<float> queries(NQ * index->d);
+        faiss::float_rand(queries.data(), NQ * index->d, 12345);
+        std::vector<float> distances(NQ * K);
+        std::vector<faiss::idx_t> labels(NQ * K);
+
+        index->search(NQ, queries.data(), K, distances.data(), labels.data());
+
+        std::cout << "\n=== Search Results ===" << std::endl;
+        for (size_t i = 0; i < NQ; i++) {
+            std::cout << "Query " << i << ": ";
+            for (size_t j = 0; j < K; j++) {
+                std::cout << labels[i * K + j] << "(" << distances[i * K + j]
+                          << ") ";
+            }
+            std::cout << std::endl;
+        }
+
+        std::cout << "Cache statistics: " << cache->cache_size()
+                  << " clusters cached" << std::endl;
 
         delete idx;
     } else {
@@ -155,7 +207,8 @@ void test_s3() {
 int main() {
     std::cout << "demo_v2" << std::endl;
 
-    read_local_file();
+    // read_local_file();
+    test_s3();
 
     return 0;
 }
