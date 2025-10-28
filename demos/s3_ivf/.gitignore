@@ -9,3 +9,10 @@ json.hpp
 # aws sdk
 aws-sdk-cpp
 aws-sdk-cpp-home
+
+# Python using the released faiss-cpu to generate the ivf file
+.venv
+
+*.tsv
+*.pt
+*.idx
