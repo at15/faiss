@@ -1,5 +1,6 @@
 // Version 2, only has a reader and rely on python script to generate the meta
 // for the index
+#include <chrono>
 #include <iostream>
 
 #include <faiss/IndexFlat.h>
@@ -137,22 +138,15 @@ void read_s3_file() {
                     "Inverted lists is not S3ReadNothingInvertedLists");
         }
 
-        // Create cache configuration (cluster_data_offset = size = 3154059)
-        faiss_s3::S3ClusterCache::Config cache_config;
-        cache_config.bucket = "test-bucket";
-        cache_config.key = "quora/index.idx";
-        cache_config.cluster_data_offset = size; // Same as downloaded header size
-        cache_config.cluster_sizes = placeholder->cluster_sizes;
-        cache_config.code_size = index->code_size;
-
-        // Create cache and fetch function
-        auto cache = std::make_shared<faiss_s3::S3ClusterCache>(
-                s3_client, cache_config);
-        auto fetch_fn = faiss_s3::make_fetch_fn(cache);
-
-        // Create on-demand inverted lists
+        // Create on-demand inverted lists (merged S3 client + cache)
         auto s3_invlists = new faiss_s3::S3OnDemandInvertedLists(
-                index->nlist, index->code_size, placeholder->cluster_sizes, fetch_fn);
+                s3_client,
+                "test-bucket",
+                "quora/index.idx",
+                size, // cluster_data_offset = size = 3154059
+                index->nlist,
+                index->code_size,
+                placeholder->cluster_sizes);
 
         index->replace_invlists(s3_invlists, true);
 
@@ -168,7 +162,14 @@ void read_s3_file() {
         std::vector<float> distances(NQ * K);
         std::vector<faiss::idx_t> labels(NQ * K);
 
+        // First search - will have cache misses
+        auto start = std::chrono::high_resolution_clock::now();
         index->search(NQ, queries.data(), K, distances.data(), labels.data());
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration_first =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                        end - start)
+                        .count();
 
         std::cout << "\n=== Search Results ===" << std::endl;
         for (size_t i = 0; i < NQ; i++) {
@@ -180,8 +181,42 @@ void read_s3_file() {
             std::cout << std::endl;
         }
 
-        std::cout << "Cache statistics: " << cache->cache_size()
-                  << " clusters cached" << std::endl;
+        std::cout << "\n=== Cache Statistics (after first search) ==="
+                  << std::endl;
+        std::cout << "Time: " << duration_first << " ms" << std::endl;
+        std::cout << "Clusters cached: " << s3_invlists->cache_size()
+                  << std::endl;
+        std::cout << "Cache hits: " << s3_invlists->cache_hits() << std::endl;
+        std::cout << "Cache misses: " << s3_invlists->cache_misses()
+                  << std::endl;
+
+        // Search again with same queries to test cache hits
+        std::cout << "\n=== Performing second search (same queries) ==="
+                  << std::endl;
+        start = std::chrono::high_resolution_clock::now();
+        index->search(NQ, queries.data(), K, distances.data(), labels.data());
+        end = std::chrono::high_resolution_clock::now();
+        auto duration_second =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                        end - start)
+                        .count();
+
+        std::cout << "\n=== Cache Statistics (after second search) ==="
+                  << std::endl;
+        std::cout << "Time: " << duration_second << " ms" << std::endl;
+        std::cout << "Clusters cached: " << s3_invlists->cache_size()
+                  << std::endl;
+        std::cout << "Cache hits: " << s3_invlists->cache_hits() << std::endl;
+        std::cout << "Cache misses: " << s3_invlists->cache_misses()
+                  << std::endl;
+
+        // Calculate speedup
+        if (duration_second > 0) {
+            double speedup = (double)duration_first / duration_second;
+            std::cout << "\nSpeedup from caching: " << speedup << "x faster ("
+                      << duration_first << " ms vs " << duration_second
+                      << " ms)" << std::endl;
+        }
 
         delete idx;
     } else {

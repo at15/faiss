@@ -144,42 +144,36 @@ void S3ReadNothingInvertedLists::resize(size_t, size_t) {
 }
 
 // ============================================================================
-// S3OnDemandInvertedLists - Improved Implementation
+// S3OnDemandInvertedLists - Simplified Implementation
 // ============================================================================
 
 S3OnDemandInvertedLists::S3OnDemandInvertedLists(
+        std::shared_ptr<void> s3_client,
+        const std::string& bucket,
+        const std::string& key,
+        size_t cluster_data_offset,
         size_t nlist,
         size_t code_size,
-        const std::vector<size_t>& sizes,
-        FetchClusterFn fetch_cluster_fn)
+        const std::vector<size_t>& cluster_sizes)
         : faiss::InvertedLists(nlist, code_size),
-          sizes_(sizes),
-          fetch_cluster_(std::move(fetch_cluster_fn)) {}
+          s3_client_(s3_client),
+          s3_bucket_(bucket),
+          s3_key_(key),
+          cluster_data_offset_(cluster_data_offset),
+          cluster_sizes_(cluster_sizes) {}
 
 size_t S3OnDemandInvertedLists::list_size(size_t list_no) const {
-    return sizes_[list_no];
+    return cluster_sizes_[list_no];
 }
 
 const uint8_t* S3OnDemandInvertedLists::get_codes(size_t list_no) const {
-    // Fetch cluster data if not already cached or different from last fetch
-    if (list_no != last_fetched_list_no_) {
-        last_fetched_data_ = fetch_cluster_(list_no);
-        last_fetched_list_no_ = list_no;
-    }
-
-    // Return pointer to cached data (shared ownership keeps it alive)
-    return last_fetched_data_->codes.data();
+    auto data = fetch_cluster(list_no);
+    return data->codes.data();
 }
 
 const idx_t* S3OnDemandInvertedLists::get_ids(size_t list_no) const {
-    // Fetch cluster data if not already cached or different from last fetch
-    if (list_no != last_fetched_list_no_) {
-        last_fetched_data_ = fetch_cluster_(list_no);
-        last_fetched_list_no_ = list_no;
-    }
-
-    // Return pointer to cached data (shared ownership keeps it alive)
-    return last_fetched_data_->ids.data();
+    auto data = fetch_cluster(list_no);
+    return data->ids.data();
 }
 
 size_t S3OnDemandInvertedLists::add_entries(
@@ -203,55 +197,67 @@ void S3OnDemandInvertedLists::resize(size_t list_no, size_t new_size) {
     FAISS_THROW_MSG("S3OnDemandInvertedLists: read-only");
 }
 
-// ============================================================================
-// S3ClusterCache - Fetch and cache layer
-// ============================================================================
-
-S3ClusterCache::S3ClusterCache(std::shared_ptr<void> s3_client, Config config)
-        : s3_client_(s3_client), config_(std::move(config)) {}
-
-std::shared_ptr<const ClusterData> S3ClusterCache::fetch(size_t list_no) {
+size_t S3OnDemandInvertedLists::cache_size() const {
     std::lock_guard<std::mutex> lock(cache_mutex_);
-
-    // Check if already cached
-    auto it = cache_.find(list_no);
-    if (it != cache_.end()) {
-        return it->second;
-    }
-
-    // Download and cache
-    auto data = download_cluster(list_no);
-    cache_[list_no] = data;
-    return data;
+    return cache_.size();
 }
 
-size_t S3ClusterCache::calculate_cluster_offset(size_t list_no) const {
-    size_t offset = config_.cluster_data_offset;
+void S3OnDemandInvertedLists::clear_cache() {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    cache_.clear();
+    cache_hits_ = 0;
+    cache_misses_ = 0;
+}
+
+size_t S3OnDemandInvertedLists::cache_hits() const {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    return cache_hits_;
+}
+
+size_t S3OnDemandInvertedLists::cache_misses() const {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    return cache_misses_;
+}
+
+size_t S3OnDemandInvertedLists::calculate_cluster_offset(size_t list_no) const {
+    size_t offset = cluster_data_offset_;
 
     // Sum up all previous clusters' sizes
     for (size_t i = 0; i < list_no; i++) {
-        size_t n = config_.cluster_sizes[i];
+        size_t n = cluster_sizes_[i];
         if (n > 0) {
-            offset += n * config_.code_size; // codes
-            offset += n * sizeof(idx_t);     // ids
+            offset += n * code_size;     // codes
+            offset += n * sizeof(idx_t); // ids
         }
     }
 
     return offset;
 }
 
-std::shared_ptr<ClusterData> S3ClusterCache::download_cluster(size_t list_no) {
-    size_t n = config_.cluster_sizes[list_no];
+std::shared_ptr<S3OnDemandInvertedLists::ClusterData> S3OnDemandInvertedLists::
+        fetch_cluster(size_t list_no) const {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
 
+    // Check if already cached
+    auto it = cache_.find(list_no);
+    if (it != cache_.end()) {
+        cache_hits_++;
+        return it->second;
+    }
+
+    // Cache miss - fetch from S3
+    cache_misses_++;
+    size_t n = cluster_sizes_[list_no];
     auto data = std::make_shared<ClusterData>();
 
     if (n == 0) {
         // Empty cluster
+        cache_[list_no] = data;
         return data;
     }
 
     size_t offset = calculate_cluster_offset(list_no);
-    size_t codes_bytes = n * config_.code_size;
+    size_t codes_bytes = n * code_size;
     size_t ids_bytes = n * sizeof(idx_t);
     size_t total_bytes = codes_bytes + ids_bytes;
 
@@ -260,7 +266,7 @@ std::shared_ptr<ClusterData> S3ClusterCache::download_cluster(size_t list_no) {
 
     // Download cluster data from S3
     auto raw_data = DownloadRangeFromS3(
-            s3_client_, config_.bucket, config_.key, offset, total_bytes);
+            s3_client_, s3_bucket_, s3_key_, offset, total_bytes);
 
     // Split into codes and ids
     data->codes.resize(codes_bytes);
@@ -271,23 +277,9 @@ std::shared_ptr<ClusterData> S3ClusterCache::download_cluster(size_t list_no) {
 
     std::cout << "✓ Cached cluster " << list_no << std::endl;
 
+    // Cache the data
+    cache_[list_no] = data;
     return data;
-}
-
-size_t S3ClusterCache::cache_size() const {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-    return cache_.size();
-}
-
-void S3ClusterCache::clear_cache() {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-    cache_.clear();
-}
-
-FetchClusterFn make_fetch_fn(std::shared_ptr<S3ClusterCache> cache) {
-    return [cache](size_t list_no) -> std::shared_ptr<const ClusterData> {
-        return cache->fetch(list_no);
-    };
 }
 
 // ============================================================================

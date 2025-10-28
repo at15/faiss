@@ -189,76 +189,25 @@ struct S3ReadOnlyInvertedLists : faiss::InvertedLists {
     void fetch_cluster(size_t list_no) const;
 };
 
-// Cluster data returned by fetch function
-// Shared ownership to avoid copies across cache and inverted list
-struct ClusterData {
-    std::vector<uint8_t> codes;
-    std::vector<idx_t> ids;
-};
-
-// Fetch function returns shared pointer to avoid copies
-// The fetch layer handles caching and returns reference to cached data
-using FetchClusterFn =
-        std::function<std::shared_ptr<const ClusterData>(size_t list_no)>;
-
-// S3 cluster cache that handles fetching and caching cluster data
-// Separates caching logic from InvertedLists implementation
-class S3ClusterCache {
-   public:
-    // Configuration for S3 access
-    struct Config {
-        std::string bucket;
-        std::string key;
-        size_t cluster_data_offset;
-        std::vector<size_t> cluster_sizes;
-        size_t code_size;
-    };
-
-    // Constructor takes S3 client and configuration
-    S3ClusterCache(std::shared_ptr<void> s3_client, Config config);
-
-    // Fetch cluster data (with caching)
-    // Returns shared pointer to avoid copies - data stays in cache
-    std::shared_ptr<const ClusterData> fetch(size_t list_no);
-
-    // Get cache statistics
-    size_t cache_size() const;
-    void clear_cache();
-
-   private:
-    std::shared_ptr<void> s3_client_;
-    Config config_;
-
-    // Cache: list_no -> cluster data
-    mutable std::unordered_map<size_t, std::shared_ptr<ClusterData>> cache_;
-    mutable std::mutex cache_mutex_;
-
-    // Download cluster data from S3
-    std::shared_ptr<ClusterData> download_cluster(size_t list_no);
-
-    // Calculate offset for a specific cluster
-    size_t calculate_cluster_offset(size_t list_no) const;
-};
-
-// Helper function to create fetch function from cache
-FetchClusterFn make_fetch_fn(std::shared_ptr<S3ClusterCache> cache);
-
-// Improved version of S3ReadOnlyInvertedLists that does not embed S3 client
-// inside it. It accepts a fetch function that fetch data of specific cluster.
-// The fetch function can do its own caching and download using S3 client.
+// S3OnDemandInvertedLists - loads cluster data from S3 on-demand with caching
+// Simplified version that merges S3 client and caching logic into one class
 struct S3OnDemandInvertedLists : faiss::InvertedLists {
-    explicit S3OnDemandInvertedLists(
+    // Constructor
+    S3OnDemandInvertedLists(
+            std::shared_ptr<void> s3_client,
+            const std::string& bucket,
+            const std::string& key,
+            size_t cluster_data_offset,
             size_t nlist,
             size_t code_size,
-            const std::vector<size_t>& sizes,
-            FetchClusterFn fetch_cluster_fn);
+            const std::vector<size_t>& cluster_sizes);
 
-    // Read from sizes directly
+    // Read methods
     size_t list_size(size_t list_no) const override;
     const uint8_t* get_codes(size_t list_no) const override;
     const idx_t* get_ids(size_t list_no) const override;
 
-    // NOT supported
+    // Write methods (not supported, read-only)
     size_t add_entries(
             size_t list_no,
             size_t n_entry,
@@ -274,14 +223,37 @@ struct S3OnDemandInvertedLists : faiss::InvertedLists {
 
     void resize(size_t list_no, size_t new_size) override;
 
-   private:
-    std::vector<size_t> sizes_;
-    FetchClusterFn fetch_cluster_;
+    // Cache statistics
+    size_t cache_size() const;
+    void clear_cache();
+    size_t cache_hits() const;
+    size_t cache_misses() const;
 
-    // Cache the last fetched cluster data to maintain pointer validity
-    // The data is shared with the fetch layer's cache
-    mutable std::shared_ptr<const ClusterData> last_fetched_data_;
-    mutable size_t last_fetched_list_no_ = static_cast<size_t>(-1);
+   private:
+    // S3 configuration
+    std::shared_ptr<void> s3_client_;
+    std::string s3_bucket_;
+    std::string s3_key_;
+    size_t cluster_data_offset_;
+
+    // Cluster metadata
+    std::vector<size_t> cluster_sizes_;
+
+    // Cache for cluster data
+    struct ClusterData {
+        std::vector<uint8_t> codes;
+        std::vector<idx_t> ids;
+    };
+    mutable std::unordered_map<size_t, std::shared_ptr<ClusterData>> cache_;
+    mutable std::mutex cache_mutex_;
+
+    // Cache statistics
+    mutable size_t cache_hits_ = 0;
+    mutable size_t cache_misses_ = 0;
+
+    // Helper methods
+    std::shared_ptr<ClusterData> fetch_cluster(size_t list_no) const;
+    size_t calculate_cluster_offset(size_t list_no) const;
 };
 
 // IO flag for S3 lazy loading
