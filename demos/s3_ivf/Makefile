@@ -7,7 +7,8 @@ build:
 	cmake --build build
 
 test: build
-	./build/demo_s3_ivf a.ivf
+#./build/demo_s3_ivf a.ivf
+	./build/demo_v2
 
 format:
-	clang-format -i demo_s3_ivf.cpp test_s3.cpp
+	clang-format -i demo_s3_ivf.cpp test_s3.cpp S3InvertedLists.cpp S3InvertedLists.h

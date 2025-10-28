@@ -10,6 +10,16 @@
 
 namespace faiss_s3 {
 
+// Metadata for calcuating offset of inverted lists so we
+// can load each cluster from S3 on demand
+struct IVFIndexMeta {
+    // This is the only thing we need, other offsets can be calculated using
+    // cluster id (list_no) and code size.
+    size_t cluster_data_offset;
+    // TODO: We can also save cluster data size
+    // so we can load everything into memory if it is too small
+};
+
 // Type alias for Faiss index type to avoid polluting namespace
 using idx_t = faiss::idx_t;
 
@@ -44,10 +54,12 @@ struct S3BuildOnlyInvertedLists : faiss::InvertedLists {
     void resize(size_t list_no, size_t new_size) override;
     // Get number of vectors in a cluster
     size_t list_size(size_t list_no) const override;
-    // inverted_list_context is for sharing centroid, only used by DispatchingInvertedLists
-    bool is_empty(size_t list_no, void* inverted_list_context = nullptr) const override;
-    // Reorder the clusters, for example shuffle the centroids base on cluster size.
-    // Both the centroids and the vectors should be shuffled at same time.
+    // inverted_list_context is for sharing centroid, only used by
+    // DispatchingInvertedLists
+    bool is_empty(size_t list_no, void* inverted_list_context = nullptr)
+            const override;
+    // Reorder the clusters, for example shuffle the centroids base on cluster
+    // size. Both the centroids and the vectors should be shuffled at same time.
     void permute_invlists(const idx_t* map);
 
     // Get all the vectors for a cluster as a raw pointer
@@ -62,50 +74,54 @@ struct S3BuildOnlyInvertedLists : faiss::InvertedLists {
     // - code is the raw pointer and visit base on n_entry and code_size
     // Returns the offset of the first new vector in the cluster
     size_t add_entries(
-        size_t list_no,
-        size_t n_entry,
-        const idx_t* ids_in,
-        const uint8_t* code) override;
+            size_t list_no,
+            size_t n_entry,
+            const idx_t* ids_in,
+            const uint8_t* code) override;
 
     // Update vectors in a cluster in place.
     // Similar to add_entries but gives offset to start updating from.
     void update_entries(
-        size_t list_no,
-        size_t offset,
-        size_t n_entry,
-        const idx_t* ids_in,
-        const uint8_t* code) override;
+            size_t list_no,
+            size_t offset,
+            size_t n_entry,
+            const idx_t* ids_in,
+            const uint8_t* code) override;
 
     // NOTE: get_iterator is for e.g. rocksdb where the entire vectors are
     // NOT loaded in memory and need to get vectors one by one. The default
     // implementation `CodeArrayIterator` wraps the raw memory addresses and
     // returns (id, vector) one by one.
-    // TODO: Is this efficient? Why not get vectors in batches to compute distance again the query vector?
+    // TODO: Is this efficient? Why not get vectors in batches to compute
+    // distance again the query vector?
 };
 
 // Placeholder created during read_index() with IO_FLAG_S3
 // All methods throw errors until replaced with S3ReadOnlyInvertedLists
 struct S3ReadNothingInvertedLists : faiss::InvertedLists {
-    std::vector<size_t> cluster_sizes;  // Store sizes from hook
+    std::vector<size_t> cluster_sizes; // Store sizes from hook
 
-    S3ReadNothingInvertedLists(size_t nlist, size_t code_size, const std::vector<size_t>& sizes);
+    S3ReadNothingInvertedLists(
+            size_t nlist,
+            size_t code_size,
+            const std::vector<size_t>& sizes);
 
     size_t list_size(size_t list_no) const override;
     const uint8_t* get_codes(size_t list_no) const override;
     const idx_t* get_ids(size_t list_no) const override;
 
     size_t add_entries(
-        size_t list_no,
-        size_t n_entry,
-        const idx_t* ids_in,
-        const uint8_t* code) override;
+            size_t list_no,
+            size_t n_entry,
+            const idx_t* ids_in,
+            const uint8_t* code) override;
 
     void update_entries(
-        size_t list_no,
-        size_t offset,
-        size_t n_entry,
-        const idx_t* ids_in,
-        const uint8_t* code) override;
+            size_t list_no,
+            size_t offset,
+            size_t n_entry,
+            const idx_t* ids_in,
+            const uint8_t* code) override;
 
     void resize(size_t list_no, size_t new_size) override;
 };
@@ -114,17 +130,18 @@ struct S3ReadNothingInvertedLists : faiss::InvertedLists {
 struct S3ReadOnlyInvertedLists : faiss::InvertedLists {
     // S3 configuration
     std::string s3_bucket;
-    std::string s3_key;  // Path to index file in S3
-    std::shared_ptr<void> s3_client_;  // Opaque pointer to S3 client (reused for all requests)
+    std::string s3_key; // Path to index file in S3
+    std::shared_ptr<void>
+            s3_client_; // Opaque pointer to S3 client (reused for all requests)
 
     // Metadata
     size_t cluster_data_offset;
     size_t sizes_array_offset;
     size_t sizes_array_count;
-    std::string sizes_array_format;  // "full" or "sparse"
+    std::string sizes_array_format; // "full" or "sparse"
 
     // Cluster information
-    std::vector<size_t> cluster_sizes;  // Number of vectors per cluster
+    std::vector<size_t> cluster_sizes;   // Number of vectors per cluster
     std::vector<size_t> cluster_offsets; // Byte offset in file
 
     // Cache (no LRU for now, cache forever)
@@ -133,13 +150,14 @@ struct S3ReadOnlyInvertedLists : faiss::InvertedLists {
     mutable std::mutex cache_mutex;
 
     // Constructor: loads metadata from JSON string and uses provided sizes
-    // s3_client should be created by caller and passed in (shared across all instances)
+    // s3_client should be created by caller and passed in (shared across all
+    // instances)
     S3ReadOnlyInvertedLists(
-        std::shared_ptr<void> s3_client,
-        const std::string& bucket,
-        const std::string& key,
-        const std::string& metadata_json,
-        const std::vector<size_t>& sizes);
+            std::shared_ptr<void> s3_client,
+            const std::string& bucket,
+            const std::string& key,
+            const std::string& metadata_json,
+            const std::vector<size_t>& sizes);
 
     // Read methods (lazy loading)
     size_t list_size(size_t list_no) const override;
@@ -148,21 +166,21 @@ struct S3ReadOnlyInvertedLists : faiss::InvertedLists {
 
     // Write methods (throw errors)
     size_t add_entries(
-        size_t list_no,
-        size_t n_entry,
-        const idx_t* ids_in,
-        const uint8_t* code) override;
+            size_t list_no,
+            size_t n_entry,
+            const idx_t* ids_in,
+            const uint8_t* code) override;
 
     void update_entries(
-        size_t list_no,
-        size_t offset,
-        size_t n_entry,
-        const idx_t* ids_in,
-        const uint8_t* code) override;
+            size_t list_no,
+            size_t offset,
+            size_t n_entry,
+            const idx_t* ids_in,
+            const uint8_t* code) override;
 
     void resize(size_t list_no, size_t new_size) override;
 
-private:
+   private:
     void load_metadata(const std::string& metadata_json);
     void load_sizes_from_s3();
     void calculate_cluster_offsets();
@@ -176,8 +194,10 @@ private:
 // fourcc("ils3") = 0x33736c69, so upper 16 bits = 0x3373
 const int IO_FLAG_S3 = faiss::IO_FLAG_SKIP_IVF_DATA | 0x33730000;
 
-// TODO: Check IndexIVFlatPanorama https://github.com/facebookresearch/faiss/pull/4606
-// TODO: I remember claude code mentioned there is prefetch .... might need to check the rocksdb implementation
+// TODO: Check IndexIVFlatPanorama
+// https://github.com/facebookresearch/faiss/pull/4606
+// TODO: I remember claude code mentioned there is prefetch .... might need to
+// check the rocksdb implementation
 
 // Manually register S3 hook (call this before using IO_FLAG_S3)
 void register_s3_io_hook();

@@ -9,11 +9,12 @@ set(CMAKE_BUILD_TYPE Debug)
 # Deps
 find_package(OpenMP REQUIRED)
 find_package(faiss REQUIRED)
-# We don't need rocksdb
-# find_package(RocksDB REQUIRED)
 find_package(AWSSDK REQUIRED COMPONENTS s3-crt)
 
+add_executable(demo_v2 demo_v2.cpp S3InvertedLists.cpp)
 add_executable(demo_s3_ivf demo_s3_ivf.cpp S3InvertedLists.cpp)
 add_executable(test_s3 test_s3.cpp)
-target_link_libraries(test_s3 ${AWSSDK_LINK_LIBRARIES})
+
+target_link_libraries(demo_v2 faiss ${AWSSDK_LINK_LIBRARIES})
 target_link_libraries(demo_s3_ivf faiss ${AWSSDK_LINK_LIBRARIES})
+target_link_libraries(test_s3 ${AWSSDK_LINK_LIBRARIES})

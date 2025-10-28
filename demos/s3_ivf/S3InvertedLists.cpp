@@ -49,7 +49,6 @@ static std::vector<uint8_t> DownloadRangeFromS3(
         const std::string& key,
         size_t offset,
         size_t size) {
-
     // Cast opaque pointer to actual S3 client type
     auto client = std::static_pointer_cast<Aws::S3Crt::S3CrtClient>(client_ptr);
 
@@ -58,35 +57,40 @@ static std::vector<uint8_t> DownloadRangeFromS3(
     request.SetKey(key);
 
     // S3 range format: "bytes=start-end" (inclusive on both ends)
-    // Use Aws::String and Aws::Utils::StringUtils::to_string like test_s3.cpp does
-    Aws::String range = "bytes=" +
-                        Aws::Utils::StringUtils::to_string(offset) + "-" +
-                        Aws::Utils::StringUtils::to_string(offset + size - 1);
+    // Use Aws::String and Aws::Utils::StringUtils::to_string like test_s3.cpp
+    // does
+    Aws::String range = "bytes=" + Aws::Utils::StringUtils::to_string(offset) +
+            "-" + Aws::Utils::StringUtils::to_string(offset + size - 1);
     request.SetRange(range);
 
     auto outcome = client->GetObject(request);
 
     if (outcome.IsSuccess()) {
-        std::cout << "Downloaded range from S3: " << bucket << "/" << key << " [" << offset << ":" << offset + size - 1 << "]" << std::endl;
+        std::cout << "Downloaded range from S3: " << bucket << "/" << key
+                  << " [" << offset << ":" << offset + size - 1 << "]"
+                  << std::endl;
         auto& stream = outcome.GetResultWithOwnership().GetBody();
         std::vector<uint8_t> data(size);
         stream.read(reinterpret_cast<char*>(data.data()), size);
 
         size_t bytes_read = stream.gcount();
         if (bytes_read != size) {
-            std::cerr << "Warning: Expected " << size << " bytes, got " << bytes_read << std::endl;
+            std::cerr << "Warning: Expected " << size << " bytes, got "
+                      << bytes_read << std::endl;
         }
 
         return data;
     } else {
-        std::cerr << "Failed to download range from S3: " << bucket << "/" << key << " [" << offset << ":" << offset + size - 1 << "]: " << outcome.GetError().GetMessage() << std::endl;
+        std::cerr << "Failed to download range from S3: " << bucket << "/"
+                  << key << " [" << offset << ":" << offset + size - 1
+                  << "]: " << outcome.GetError().GetMessage() << std::endl;
         FAISS_THROW_FMT(
-            "Failed to download range from s3://%s/%s [%zu:%zu]: %s",
-            bucket.c_str(),
-            key.c_str(),
-            offset,
-            offset + size,
-            outcome.GetError().GetMessage().c_str());
+                "Failed to download range from s3://%s/%s [%zu:%zu]: %s",
+                bucket.c_str(),
+                key.c_str(),
+                offset,
+                offset + size,
+                outcome.GetError().GetMessage().c_str());
     }
 }
 
@@ -109,20 +113,29 @@ size_t S3ReadNothingInvertedLists::list_size(size_t list_no) const {
 }
 
 const uint8_t* S3ReadNothingInvertedLists::get_codes(size_t list_no) const {
-    FAISS_THROW_MSG("S3ReadNothingInvertedLists: not initialized, use replace_invlists");
+    FAISS_THROW_MSG(
+            "S3ReadNothingInvertedLists: not initialized, use replace_invlists");
 }
 
 const idx_t* S3ReadNothingInvertedLists::get_ids(size_t list_no) const {
-    FAISS_THROW_MSG("S3ReadNothingInvertedLists: not initialized, use replace_invlists");
+    FAISS_THROW_MSG(
+            "S3ReadNothingInvertedLists: not initialized, use replace_invlists");
 }
 
 size_t S3ReadNothingInvertedLists::add_entries(
-        size_t, size_t, const idx_t*, const uint8_t*) {
+        size_t,
+        size_t,
+        const idx_t*,
+        const uint8_t*) {
     FAISS_THROW_MSG("S3ReadNothingInvertedLists: read-only");
 }
 
 void S3ReadNothingInvertedLists::update_entries(
-        size_t, size_t, size_t, const idx_t*, const uint8_t*) {
+        size_t,
+        size_t,
+        size_t,
+        const idx_t*,
+        const uint8_t*) {
     FAISS_THROW_MSG("S3ReadNothingInvertedLists: read-only");
 }
 
@@ -143,9 +156,8 @@ S3ReadOnlyInvertedLists::S3ReadOnlyInvertedLists(
         : faiss::InvertedLists(0, 0),
           s3_bucket(bucket),
           s3_key(key),
-          s3_client_(s3_client),  // Store passed-in client
+          s3_client_(s3_client), // Store passed-in client
           cluster_sizes(sizes) {
-
     load_metadata(metadata_json);
     // Sizes already provided from placeholder, no need to download
     calculate_cluster_offsets();
@@ -177,7 +189,7 @@ void S3ReadOnlyInvertedLists::load_sizes_from_s3() {
     size_t total_size = count_size + data_size;
 
     auto data = DownloadRangeFromS3(
-        s3_client_, s3_bucket, s3_key, sizes_array_offset, total_size);
+            s3_client_, s3_bucket, s3_key, sizes_array_offset, total_size);
 
     // Parse count
     size_t count;
@@ -201,7 +213,8 @@ void S3ReadOnlyInvertedLists::load_sizes_from_s3() {
         }
     }
 
-    std::cout << "✓ Loaded cluster sizes (" << sizes_array_format << " format)" << std::endl;
+    std::cout << "✓ Loaded cluster sizes (" << sizes_array_format << " format)"
+              << std::endl;
 }
 
 void S3ReadOnlyInvertedLists::calculate_cluster_offsets() {
@@ -212,8 +225,8 @@ void S3ReadOnlyInvertedLists::calculate_cluster_offsets() {
         cluster_offsets[i] = offset;
         size_t n = cluster_sizes[i];
         if (n > 0) {
-            offset += n * code_size;  // codes
-            offset += n * sizeof(idx_t);  // ids
+            offset += n * code_size;     // codes
+            offset += n * sizeof(idx_t); // ids
         }
     }
 }
@@ -236,7 +249,8 @@ void S3ReadOnlyInvertedLists::fetch_cluster(size_t list_no) const {
               << total_bytes << " bytes)" << std::endl;
 
     // Download cluster data from S3 using stored client
-    auto data = DownloadRangeFromS3(s3_client_, s3_bucket, s3_key, offset, total_bytes);
+    auto data = DownloadRangeFromS3(
+            s3_client_, s3_bucket, s3_key, offset, total_bytes);
 
     // Split into codes and ids
     std::vector<uint8_t> codes(codes_bytes);
@@ -277,12 +291,19 @@ size_t S3ReadOnlyInvertedLists::list_size(size_t list_no) const {
 }
 
 size_t S3ReadOnlyInvertedLists::add_entries(
-        size_t, size_t, const idx_t*, const uint8_t*) {
+        size_t,
+        size_t,
+        const idx_t*,
+        const uint8_t*) {
     FAISS_THROW_MSG("S3ReadOnlyInvertedLists: read-only");
 }
 
 void S3ReadOnlyInvertedLists::update_entries(
-        size_t, size_t, size_t, const idx_t*, const uint8_t*) {
+        size_t,
+        size_t,
+        size_t,
+        const idx_t*,
+        const uint8_t*) {
     FAISS_THROW_MSG("S3ReadOnlyInvertedLists: read-only");
 }
 
@@ -396,15 +417,20 @@ void S3BuildOnlyInvertedLists::update_entries(
 
 struct S3InvertedListsIOHook : faiss::InvertedListsIOHook {
     S3InvertedListsIOHook()
-        : InvertedListsIOHook("ils3", typeid(S3ReadNothingInvertedLists).name()) {
-        std::cout << "[S3Hook] Registering S3InvertedListsIOHook (fourcc: ils3)" << std::endl;
+            : InvertedListsIOHook(
+                      "ils3",
+                      typeid(S3ReadNothingInvertedLists).name()) {
+        std::cout << "[S3Hook] Registering S3InvertedListsIOHook (fourcc: ils3)"
+                  << std::endl;
     }
 
-    void write(const faiss::InvertedLists* ils, faiss::IOWriter* f) const override {
+    void write(const faiss::InvertedLists* ils, faiss::IOWriter* f)
+            const override {
         FAISS_THROW_MSG("S3InvertedLists is read-only, cannot write");
     }
 
-    faiss::InvertedLists* read(faiss::IOReader* f, int io_flags) const override {
+    faiss::InvertedLists* read(faiss::IOReader* f, int io_flags)
+            const override {
         FAISS_THROW_MSG("Use read_ArrayInvertedLists instead");
     }
 
@@ -414,9 +440,10 @@ struct S3InvertedListsIOHook : faiss::InvertedListsIOHook {
             size_t nlist,
             size_t code_size,
             const std::vector<size_t>& sizes) const override {
-
-        std::cout << "[S3Hook] Creating S3ReadNothingInvertedLists placeholder" << std::endl;
-        std::cout << "[S3Hook] nlist=" << nlist << ", code_size=" << code_size << std::endl;
+        std::cout << "[S3Hook] Creating S3ReadNothingInvertedLists placeholder"
+                  << std::endl;
+        std::cout << "[S3Hook] nlist=" << nlist << ", code_size=" << code_size
+                  << std::endl;
 
         // Create placeholder with sizes
         auto s3il = new S3ReadNothingInvertedLists(nlist, code_size, sizes);
@@ -427,7 +454,8 @@ struct S3InvertedListsIOHook : faiss::InvertedListsIOHook {
             total_bytes += s * (code_size + sizeof(faiss::idx_t));
         }
 
-        std::cout << "[S3Hook] Skipping " << total_bytes << " bytes of cluster data" << std::endl;
+        std::cout << "[S3Hook] Skipping " << total_bytes
+                  << " bytes of cluster data" << std::endl;
 
         // Skip cluster data in file stream
         auto* reader = dynamic_cast<faiss::FileIOReader*>(f);
@@ -440,20 +468,24 @@ struct S3InvertedListsIOHook : faiss::InvertedListsIOHook {
 };
 
 // Register hook during static initialization
-static bool register_s3_hook_internal() {
-    faiss::InvertedListsIOHook::add_callback(new S3InvertedListsIOHook());
-    std::cout << "[S3Hook] S3InvertedListsIOHook registered successfully (static init)" << std::endl;
-    return true;
-}
+// static bool register_s3_hook_internal() {
+//     faiss::InvertedListsIOHook::add_callback(new S3InvertedListsIOHook());
+//     std::cout
+//             << "[S3Hook] S3InvertedListsIOHook registered successfully
+//             (static init)"
+//             << std::endl;
+//     return true;
+// }
 
-static bool _s3_hook_registered = register_s3_hook_internal();
+// static bool _s3_hook_registered = register_s3_hook_internal();
 
 // Public function to manually register hook
 void register_s3_io_hook() {
     static bool registered = false;
     if (!registered) {
         faiss::InvertedListsIOHook::add_callback(new S3InvertedListsIOHook());
-        std::cout << "[S3Hook] S3InvertedListsIOHook registered (manual)" << std::endl;
+        std::cout << "[S3Hook] S3InvertedListsIOHook registered (manual)"
+                  << std::endl;
         registered = true;
     }
 }
