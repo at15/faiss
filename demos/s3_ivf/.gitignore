@@ -16,3 +16,7 @@ aws-sdk-cpp-home
 *.tsv
 *.pt
 *.idx
+
+# TCP server
+test_tcp_server
+server.log
