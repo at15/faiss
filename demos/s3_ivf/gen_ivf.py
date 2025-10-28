@@ -9,6 +9,9 @@ import numpy as np
 import pickle
 import faiss
 
+from boto3.s3.transfer import TransferConfig
+import boto3
+
 # 768 dimensions https://huggingface.co/sentence-transformers/quora-distilbert-multilingual
 model_name = "quora-distilbert-multilingual"
 embedding_size = 768  # Size of embeddings
@@ -217,19 +220,7 @@ def write_metadata_json(metadata, index_file_path):
     print(f"\nMetadata written to: {metadata_file}")
     return metadata_file
 
-def main():
-    print("Starting IVF index generation...")
-    
-    # Create embeddings
-    # model = load_model()
-    # corpus_sentences, corpus_embeddings = create_embeddings(model)
-
-    # Create index
-    # corpus_sentences, corpus_embeddings = load_embeddings()
-    # print(f"Corpus embeddings shape: {corpus_embeddings.shape}")
-    # print(f"Corpus sentences shape: {len(corpus_sentences)}")
-    # index = create_index(corpus_embeddings)
-
+def read_index():
     # Read index
     index = load_index()
     index_file_path = get_index_cache_path()
@@ -270,6 +261,35 @@ def main():
         write_metadata_json(metadata, index_file_path)
     else:
         print(f"Index is not IndexIVFFlat, it's {type(index)}")
+
+"""
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_REGION=us-east-1
+export AWS_EC2_METADATA_DISABLED=true
+export S3_ENDPOINT_URL=http://localhost:9000
+"""
+def upload_to_s3():
+    # Disable multipart by setting threshold to something huge, our local gos3mock does not support multipart
+    config = TransferConfig(multipart_threshold=1024 * 1024 * 1024 * 100)  # 100 GB
+    s3 = boto3.client('s3')
+    s3.upload_file(get_index_cache_path(), "test-bucket", "quora/index.idx", Config=config)
+
+def main():
+    print("Starting IVF index generation...")
+    
+    # Create embeddings
+    # model = load_model()
+    # corpus_sentences, corpus_embeddings = create_embeddings(model)
+
+    # Create index
+    # corpus_sentences, corpus_embeddings = load_embeddings()
+    # print(f"Corpus embeddings shape: {corpus_embeddings.shape}")
+    # print(f"Corpus sentences shape: {len(corpus_sentences)}")
+    # index = create_index(corpus_embeddings)
+
+    # read_index()
+    upload_to_s3()
 
 if __name__ == "__main__":
     main()

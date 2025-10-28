@@ -28,6 +28,7 @@ export AWS_SECRET_ACCESS_KEY=test
 export AWS_REGION=us-east-1
 export AWS_EC2_METADATA_DISABLED=true
 export S3_ENDPOINT_URL=http://localhost:9000
+export AWS_ENDPOINT_URL_S3=http://localhost:9000
 
 # Write to local s3mock
 ./build/test_s3 test-bucket test.txt put "Hello, S3 test"

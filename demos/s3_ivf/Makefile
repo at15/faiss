@@ -11,4 +11,4 @@ test: build
 	./build/demo_v2
 
 format:
-	clang-format -i demo_s3_ivf.cpp test_s3.cpp S3InvertedLists.cpp S3InvertedLists.h
+	clang-format -i demo_v2.cpp demo_s3_ivf.cpp test_s3.cpp S3InvertedLists.cpp S3InvertedLists.h
