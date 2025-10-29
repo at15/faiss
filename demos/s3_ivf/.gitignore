@@ -17,6 +17,8 @@ aws-sdk-cpp-home
 *.pt
 *.idx
 
-# TCP server
+# TCP servers
 test_tcp_server
+s3_cache_server
 server.log
+s3_cache_server.log
