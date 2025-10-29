@@ -3,6 +3,11 @@
 Demo of using S3 for a readonly IVF index. The index is built in memory and flushed to S3.
 When using the index, centroids are loaded into memory and the inverted lists are loaded from S3 on demand.
 
+Currently the implementation is a cache server with a custom TCP protocol.
+The in memory cache has no LRU and big lock is used everywhere.
+
+Future development is using https://github.com/at15/faiss-s3 because we don't plan to create a new python binding and can just provides a binary server that statically links to official faiss library.
+
 ## TODO
 
 - [x] CMake to make sure things are working
