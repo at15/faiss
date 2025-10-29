@@ -262,6 +262,31 @@ def read_index():
     else:
         print(f"Index is not IndexIVFFlat, it's {type(index)}")
 
+# Query using faiss index
+# Original text is saved in pickle file, we only need the corpus sentences
+def query_index():
+    index = load_index()
+    model = load_model()
+    corpus_sentences, _ = load_embeddings()
+
+    questions = [
+        "How to find a job",
+        "What to eat for lunch",
+        "Which sport is similar to tennis"
+    ]
+
+    for question in questions:
+        embedding = model.encode(question, convert_to_numpy=True)
+        embedding = embedding / np.linalg.norm(embedding)
+        embedding = np.expand_dims(embedding, axis=0)
+
+        distances, corpus_ids = index.search(embedding, top_k_hits)
+        hits = [{"corpus_id": id, "score": score} for id, score in zip(corpus_ids[0], distances[0])]
+        hits = sorted(hits, key=lambda x: x["score"], reverse=True)
+        print(f"Question: {question}")
+        for hit in hits:
+            print("\t{:.3f}\t{}".format(hit["score"], corpus_sentences[hit["corpus_id"]]))
+
 """
 export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
@@ -289,7 +314,9 @@ def main():
     # index = create_index(corpus_embeddings)
 
     # read_index()
-    upload_to_s3()
+    # upload_to_s3()
+
+    query_index()
 
 if __name__ == "__main__":
     main()
